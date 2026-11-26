@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Gelee Brawl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+
+<!-- Three.js + Cannon-es per Importmap (kein Build-Tool nötig) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+  }
+}
+</script>
+<!-- PeerJS (UMD, setzt window.Peer) -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+<!-- 3D-Spielfeld -->
+<canvas id="game-canvas"></canvas>
+
+<!-- Ladebildschirm -->
+<section id="screen-loading" class="screen active">
+  <h1 class="logo">Gelee<span>Brawl</span></h1>
+  <div class="loadbar"><i id="load-fill"></i></div>
+  <p id="load-text">Gelee wird angerührt …</p>
+</section>
+
+<!-- Hauptmenü -->
+<section id="screen-menu" class="screen">
+  <h1 class="logo">Gelee<span>Brawl</span></h1>
+  <div class="stack">
+    <button class="btn big" data-action="solo">Gegen Bots spielen</button>
+    <button class="btn big alt" data-action="host">Lobby erstellen</button>
+    <button class="btn big alt2" data-action="open-join">Lobby beitreten</button>
+    <button class="btn" data-action="open-costume">Aussehen ändern</button>
+  </div>
+  <p class="hint" id="hint-controls"></p>
+</section>
+
+<!-- Beitreten -->
+<section id="screen-join" class="screen">
+  <h2>Raum-Code eingeben</h2>
+  <input id="join-code" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">
+  <p class="error" id="join-error"></p>
+  <div class="row">
+    <button class="btn" data-action="back-menu">Zurück</button>
+    <button class="btn big" data-action="join">Beitreten</button>
+  </div>
+</section>
+
+<!-- Lobby -->
+<section id="screen-lobby" class="screen">
+  <h2>Lobby</h2>
+  <div class="code-box"><small>Raum-Code</small><strong id="lobby-code">----</strong></div>
+  <ul id="lobby-players" class="players"></ul>
+  <p class="hint" id="lobby-status">Warte auf Mitspieler …</p>
+  <div class="row">
+    <button class="btn" data-action="leave-lobby">Verlassen</button>
+    <button class="btn" data-action="open-costume">Aussehen</button>
+    <button class="btn big" data-action="open-maps" id="btn-lobby-start">Map wählen</button>
+  </div>
+</section>
+
+<!-- Kostüm-Editor -->
+<section id="screen-costume" class="screen">
+  <div class="split">
+    <div id="preview-mount" class="preview" aria-label="3D-Vorschau"></div>
+    <div class="panel">
+      <h2>Dein Gelee</h2>
+      <h3>Farbe</h3>
+      <div id="color-grid" class="swatches"></div>
+      <h3>Kostüm</h3>
+      <div id="costume-grid" class="chips"></div>
+      <button class="btn big" data-action="save-costume">Fertig</button>
+    </div>
+  </div>
+</section>
+
+<!-- Map-Auswahl -->
+<section id="screen-maps" class="screen">
+  <h2>Arena wählen</h2>
+  <div id="map-grid" class="maps"></div>
+  <div class="row">
+    <button class="btn" data-action="back-previous">Zurück</button>
+    <button class="btn big" data-action="start" id="btn-start" disabled>Los geht's</button>
+  </div>
+</section>
+
+<!-- HUD im Spiel -->
+<section id="hud" class="hidden">
+  <div id="hud-top">
+    <div id="hud-scores"></div>
+    <div id="hud-timer"></div>
+    <button id="btn-pause" class="btn small" aria-label="Pause">II</button>
+  </div>
+  <div id="hud-toast"></div>
+  <div id="hud-ko" class="hidden">Wach auf! Tippe wild auf Springen!</div>
+
+  <!-- Touch-Steuerung (iPad) -->
+  <div id="touch" class="hidden">
+    <div id="stick"><div id="stick-knob"></div></div>
+    <div id="touch-buttons">
+      <button class="tb" id="tb-lh" data-key="lh">Links</button>
+      <button class="tb" id="tb-rh" data-key="rh">Rechts</button>
+      <button class="tb big" id="tb-jump" data-key="jump">Spring</button>
+      <button class="tb" id="tb-head" data-key="head">Kopf</button>
+      <button class="tb" id="tb-lift" data-key="lift">Heb</button>
+    </div>
+  </div>
+</section>
+
+<!-- Pause -->
+<section id="screen-pause" class="screen">
+  <h2>Pause</h2>
+  <div class="stack">
+    <button class="btn big" data-action="resume">Weiterspielen</button>
+    <button class="btn" data-action="quit">Zum Menü</button>
+  </div>
+</section>
+
+<!-- Ergebnis -->
+<section id="screen-results" class="screen">
+  <h2 id="result-title">Sieger</h2>
+  <ol id="result-list" class="players"></ol>
+  <div class="row">
+    <button class="btn" data-action="quit">Zum Menü</button>
+    <button class="btn big" data-action="rematch">Nochmal</button>
+  </div>
+</section>
+
+<!-- Querformat-Hinweis (iPad hochkant) -->
+<div id="rotate-note">Dreh dein iPad ins Querformat.</div>
+
+<!-- Einstieg: main.js entsteht im nächsten Schritt; ui.js läuft bis dahin allein -->
+<script type="module" src="ui.js"></script>
+<script type="module" src="main.js"></script>
+</body>
+</html>
